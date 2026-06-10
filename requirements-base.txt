@@ -1,0 +1,8 @@
+numpy>=1.26
+opencv-python>=4.8.0
+scikit-learn>=1.4.0
+timm>=0.9.0
+ultralytics>=8.0.0
+anomalib>=1.0.0
+PyYAML>=6.0
+segment-anything>=1.0.0

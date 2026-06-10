@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+
+# Data, outputs, and generated files
+dataset/
+dataset_rejects/
+reports/
+anomalib_dataset/
+anomalib_results/
+object_detection_dataset/
+runs/
+detector_labeling_pool/
+casting_512x512/
+
+# Model weights and large binaries
+*.pth
+*.pt
+*.ckpt
+*.weights
+
+# Temporary files
+*.log
+*.tmp
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
