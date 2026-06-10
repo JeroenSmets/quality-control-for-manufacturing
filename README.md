@@ -15,7 +15,9 @@ This repository contains a manufacturing quality-control pipeline for classifier
 
 ## Repository Setup
 
-This repository is ready to initialize and push to GitHub. Example commands:
+This repository is ready to initialize and push to GitHub. The included `.gitignore` excludes local dataset folders, generated outputs, and large model weights so that the published repo stays small and portable.
+
+Example commands:
 
 ```powershell
 git init
