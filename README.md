@@ -34,10 +34,11 @@ git push -u origin main
 2. Manually label object bounding boxes in the sampled images
 3. Create a YOLO-format detection dataset and validate it
 4. Train an Ultralytics YOLO object detector
-5. Build a detector-cropped `dataset` for classifier and anomaly training
-6. Validate the prepared classifier/anomaly dataset
-7. Run classifier training
-8. Run anomaly detector training
+5. Test the object detector on unseen raw images
+6. Build a detector-cropped `dataset` for classifier and anomaly training
+7. Validate the prepared classifier/anomaly dataset
+8. Run classifier training
+9. Run anomaly detector training
 
 ## Expected Folder Structure
 
@@ -107,10 +108,10 @@ Do not label defects as separate detector classes. The `good` / `bad` quality la
 ### 1. Sample images for detector labeling
 
 ```bash
-python sample_detection_label_images.py
+python sample_detection_label_images.py --good-count 50 --bad-count 50
 ```
 
-This copies a small representative sample from `casting_512x512/ok_front` and `casting_512x512/def_front` into `detector_labeling_pool/` and creates `detector_labeling_pool/manifest.csv`.
+This copies 100 representative images, 50 from `casting_512x512/ok_front` and 50 from `casting_512x512/def_front`, into `detector_labeling_pool/` and creates `detector_labeling_pool/manifest.csv`.
 
 ### 2. Manually label object boxes
 
@@ -123,8 +124,10 @@ python label_detection_images.py --image-dir detector_labeling_pool --labels-dir
 If you have a Segment Anything checkpoint, enable point-guided SAM segmentation with:
 
 ```bash
-python label_detection_images.py --image-dir detector_labeling_pool --labels-dir detector_labeling_pool --sam-checkpoint C:\Python\Projects\PytorchTest\sam_vit_b_01ec64.pth --sam-model vit_b
+python label_detection_images.py --image-dir detector_labeling_pool --labels-dir detector_labeling_pool --sam-checkpoint .\sam_vit_b_01ec64.pth --sam-model vit_b --device cuda
 ```
+
+If you use an absolute checkpoint path that contains spaces, quote it, for example: `--sam-checkpoint "C:\Python Code\qc_for_manufacturing\sam_vit_b_01ec64.pth"`.
 
 - Left click to add foreground points on the inspected object.
 - Right click to add background points on the surrounding area.
@@ -182,13 +185,31 @@ If you have a GPU, you can override:
 python train_object_detector.py --device 0 --epochs 100 --batch-size 4
 ```
 
-### 5. Build the detector-cropped dataset
+### 5. Test the object detector on unseen raw images
 
 ```bash
-python build_dataset_from_detector.py
+python test_object_detector_on_unseen.py --device 0 --count-per-class 10
 ```
 
-This processes raw images, crops detected inspected objects, splits by `70/15/15`, and writes the output into:
+This samples 10 unseen images from `casting_512x512/ok_front` and 10 unseen images from `casting_512x512/def_front`, excluding images listed in `detector_labeling_pool/manifest.csv`, then saves annotated predictions and `summary.csv` to:
+
+```text
+runs/detect/unseen_object_detector_test
+```
+
+If an object is missed but appears visually clear, retry with a lower confidence threshold:
+
+```bash
+python test_object_detector_on_unseen.py --device 0 --count-per-class 10 --conf 0.10 --output-dir runs/detect/unseen_object_detector_test_conf010
+```
+
+### 6. Build the detector-cropped dataset
+
+```bash
+python build_dataset_from_detector.py --weights runs/detect/runs/detect/inspection_object_detector/weights/best.pt --device 0
+```
+
+This uses the trained best object detector on CUDA GPU `0` with the default confidence threshold `0.25`, processes raw images, crops detected inspected objects, splits by `70/15/15`, and writes the output into:
 
 ```text
 dataset/train/good
@@ -201,7 +222,7 @@ dataset/train/good
 
 Rejected source images are written to `dataset_rejects/no_detection/` or `dataset_rejects/read_error/`.
 
-### 6. Validate the prepared dataset
+### 7. Validate the prepared dataset
 
 ```bash
 python validate_prepared_dataset.py
@@ -209,17 +230,60 @@ python validate_prepared_dataset.py
 
 This validates the final dataset structure, reads images, ensures no zero-sized crops, checks manifest consistency, and writes a JSON report and optional preview image under `reports/`.
 
-### 7. Run classifier training
+### 8. Run classifier training
 
 ```bash
-python finetuning_classify.py
+python finetuning_classify.py --device 0
 ```
 
-### 8. Run anomaly detector training
+This trains the good/bad classifier on CUDA GPU `0` using the detector-cropped `dataset/` folder. Each run automatically creates a timestamped results folder under:
+
+```text
+runs/classify
+```
+
+Each classifier run folder contains:
+- `config.json`
+- `training_history.csv`
+- `training_curves.png`
+- `confusion_matrix.csv`
+- `confusion_matrix.png`
+- `classification_report.txt`
+- `classification_report.json`
+- `test_predictions.csv`
+- `metrics.json`
+- `qc_classifier.pt`
+
+### 9. Run anomaly detector training
 
 ```bash
-python finetuning_anomaly.py
+python finetuning_anomaly.py --device 0
 ```
+
+This prepares `anomalib_dataset/` from the detector-cropped `dataset/` folder and trains PatchCore on CUDA GPU `0`. Each run automatically creates a timestamped results folder under:
+
+```text
+runs/anomaly
+```
+
+Each anomaly run folder contains:
+- `config.json`
+- `dataset_summary.json`
+- `anomalib_dataset_manifest.csv`
+- `test_results.json`
+- `test_results.csv`
+- `test_results.txt`
+- `anomaly_predictions.csv`
+- `anomaly_predictions.json`
+- `prediction_summary.json`
+- `anomaly_confusion_matrix.csv`
+- `anomaly_confusion_matrix.png`
+- `anomaly_score_distribution.png`
+- `anomaly_score_ranking.png`
+- `wrong_predictions/`
+- `metrics.json`
+- `patchcore_metadata.ckpt`
+- `anomalib_engine/`
 
 ## Notes
 

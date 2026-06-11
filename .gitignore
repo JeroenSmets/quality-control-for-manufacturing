@@ -27,6 +27,8 @@ object_detection_dataset/
 runs/
 detector_labeling_pool/
 casting_512x512/
+dataset_manifest.csv
+test_predictions.csv
 
 # Model weights and large binaries
 *.pth
