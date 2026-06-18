@@ -4,6 +4,7 @@ from datetime import datetime
 import csv
 import json
 import shutil
+import sys
 import torch
 from sklearn.metrics import confusion_matrix
 
@@ -11,21 +12,21 @@ from anomalib.data import Folder
 from anomalib.engine import Engine
 from anomalib.models import Patchcore
 
-from project_config import DATASET_ROOT, NUM_WORKERS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import (
+    ANOMALIB_DATASET_ROOT,
+    ANOMALY_RUNS_DIR,
+    DATASET_ROOT,
+    NUM_WORKERS,
+)
 
 
 # =========================
 # Configuration
 # =========================
 
-TRAIN_GOOD_DIR = DATASET_ROOT / "train" / "good"
-VAL_GOOD_DIR = DATASET_ROOT / "val" / "good"
-VAL_BAD_DIR = DATASET_ROOT / "val" / "bad"
-TEST_GOOD_DIR = DATASET_ROOT / "test" / "good"
-TEST_BAD_DIR = DATASET_ROOT / "test" / "bad"
-
-ANOMALIB_DATASET_ROOT = Path("anomalib_dataset")
-RUNS_DIR = Path("runs") / "anomaly"
+RUNS_DIR = ANOMALY_RUNS_DIR
 
 IMAGE_SIZE = (224, 224)
 
@@ -48,6 +49,18 @@ NUM_NEIGHBORS = 9
 def parse_args():
     parser = ArgumentParser(
         description="Train a PatchCore anomaly detector on detector-cropped images."
+    )
+    parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=DATASET_ROOT,
+        help="Root of the prepared classifier dataset.",
+    )
+    parser.add_argument(
+        "--anomalib-root",
+        type=Path,
+        default=ANOMALIB_DATASET_ROOT,
+        help="Folder where the Anomalib-compatible dataset is created.",
     )
     parser.add_argument(
         "--device",
@@ -520,7 +533,7 @@ def copy_images(src_dir: Path, dst_dir: Path, source_split: str, target_split: s
     return count, manifest_rows
 
 
-def prepare_anomalib_folder_dataset():
+def prepare_anomalib_folder_dataset(dataset_root: Path, anomalib_dataset_root: Path):
     """
     Convert the existing classification dataset into an Anomalib-friendly layout.
 
@@ -544,26 +557,32 @@ def prepare_anomalib_folder_dataset():
 
     print("\nChecking source dataset...")
 
-    check_folder_exists(TRAIN_GOOD_DIR, "Train good")
-    check_folder_exists(VAL_GOOD_DIR, "Validation good")
-    check_folder_exists(VAL_BAD_DIR, "Validation bad")
-    check_folder_exists(TEST_GOOD_DIR, "Test good")
-    check_folder_exists(TEST_BAD_DIR, "Test bad")
+    train_good_dir = dataset_root / "train" / "good"
+    val_good_dir = dataset_root / "val" / "good"
+    val_bad_dir = dataset_root / "val" / "bad"
+    test_good_dir = dataset_root / "test" / "good"
+    test_bad_dir = dataset_root / "test" / "bad"
 
-    if ANOMALIB_DATASET_ROOT.exists():
-        print(f"\nRemoving existing folder: {ANOMALIB_DATASET_ROOT}")
-        shutil.rmtree(ANOMALIB_DATASET_ROOT)
+    check_folder_exists(train_good_dir, "Train good")
+    check_folder_exists(val_good_dir, "Validation good")
+    check_folder_exists(val_bad_dir, "Validation bad")
+    check_folder_exists(test_good_dir, "Test good")
+    check_folder_exists(test_bad_dir, "Test bad")
 
-    train_good_target = ANOMALIB_DATASET_ROOT / "train" / "good"
-    test_good_target = ANOMALIB_DATASET_ROOT / "test" / "good"
-    test_bad_target = ANOMALIB_DATASET_ROOT / "test" / "bad"
+    if anomalib_dataset_root.exists():
+        print(f"\nRemoving existing folder: {anomalib_dataset_root}")
+        shutil.rmtree(anomalib_dataset_root)
+
+    train_good_target = anomalib_dataset_root / "train" / "good"
+    test_good_target = anomalib_dataset_root / "test" / "good"
+    test_bad_target = anomalib_dataset_root / "test" / "bad"
 
     print("\nPreparing Anomalib folder dataset...")
 
     manifest_rows = []
 
     train_good_count, rows = copy_images(
-        TRAIN_GOOD_DIR,
+        train_good_dir,
         train_good_target,
         source_split="train",
         target_split="train",
@@ -573,7 +592,7 @@ def prepare_anomalib_folder_dataset():
     manifest_rows.extend(rows)
 
     val_good_count, rows = copy_images(
-        VAL_GOOD_DIR,
+        val_good_dir,
         test_good_target,
         source_split="val",
         target_split="test",
@@ -582,7 +601,7 @@ def prepare_anomalib_folder_dataset():
     )
     manifest_rows.extend(rows)
     test_good_count, rows = copy_images(
-        TEST_GOOD_DIR,
+        test_good_dir,
         test_good_target,
         source_split="test",
         target_split="test",
@@ -592,7 +611,7 @@ def prepare_anomalib_folder_dataset():
     manifest_rows.extend(rows)
 
     val_bad_count, rows = copy_images(
-        VAL_BAD_DIR,
+        val_bad_dir,
         test_bad_target,
         source_split="val",
         target_split="test",
@@ -601,7 +620,7 @@ def prepare_anomalib_folder_dataset():
     )
     manifest_rows.extend(rows)
     test_bad_count, rows = copy_images(
-        TEST_BAD_DIR,
+        test_bad_dir,
         test_bad_target,
         source_split="test",
         target_split="test",
@@ -616,7 +635,7 @@ def prepare_anomalib_folder_dataset():
     print(f"  {test_bad_target}:   {val_bad_count + test_bad_count} images")
 
     dataset_summary = {
-        "anomalib_dataset_root": str(ANOMALIB_DATASET_ROOT),
+        "anomalib_dataset_root": str(anomalib_dataset_root),
         "train_good": train_good_count,
         "test_good_from_val": val_good_count,
         "test_good_from_test": test_good_count,
@@ -626,7 +645,7 @@ def prepare_anomalib_folder_dataset():
         "test_bad_total": val_bad_count + test_bad_count,
     }
 
-    return ANOMALIB_DATASET_ROOT, dataset_summary, manifest_rows
+    return anomalib_dataset_root, dataset_summary, manifest_rows
 
 
 # =========================
@@ -640,7 +659,10 @@ def main():
 
     print("Run results:", run_dir)
 
-    anomalib_root, dataset_summary, manifest_rows = prepare_anomalib_folder_dataset()
+    anomalib_root, dataset_summary, manifest_rows = prepare_anomalib_folder_dataset(
+        args.dataset_root,
+        args.anomalib_root,
+    )
     save_dataset_manifest(run_dir, manifest_rows)
     write_json(run_dir / "dataset_summary.json", dataset_summary)
 
@@ -663,7 +685,7 @@ def main():
             "accelerator": accelerator,
             "devices": devices,
             "gpu": torch.cuda.get_device_name(cuda_index) if cuda_index is not None else None,
-            "dataset_root": DATASET_ROOT,
+            "dataset_root": args.dataset_root,
             "anomalib_dataset_root": anomalib_root,
             "anomalib_engine_dir": anomalib_engine_dir,
             "image_size": IMAGE_SIZE,

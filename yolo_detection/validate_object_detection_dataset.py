@@ -2,7 +2,10 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-from project_config import IMAGE_EXTENSIONS, OBJECT_DETECTION_DATASET_ROOT, OBJECT_DETECTION_DATA_YAML
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.path_utils import repo_relative_or_absolute
+from shared.project_config import IMAGE_EXTENSIONS, OBJECT_DETECTION_DATASET_ROOT, OBJECT_DETECTION_DATA_YAML
 
 
 class ValidationError(Exception):
@@ -36,9 +39,23 @@ def validate_data_yaml(data, data_yaml_path: Path, dataset_root: Path):
         if key not in data:
             raise ValidationError(f"data.yaml is missing required key '{key}' in {data_yaml_path}")
 
-    if data["path"] != str(dataset_root.name) and data["path"] != str(dataset_root):
+    data_path_value = str(data["path"])
+    data_path = Path(data_path_value)
+    if data_path.is_absolute():
+        path_matches = data_path.resolve() == dataset_root.resolve()
+    else:
+        expected_values = {
+            dataset_root.name,
+            str(dataset_root),
+            dataset_root.as_posix(),
+            repo_relative_or_absolute(dataset_root),
+        }
+        normalized_expected = {value.replace("\\", "/") for value in expected_values}
+        path_matches = data_path_value.replace("\\", "/") in normalized_expected
+
+    if not path_matches:
         raise ValidationError(
-            f"data.yaml path must point to '{dataset_root.name}', got '{data['path']}'"
+            f"data.yaml path must point to '{repo_relative_or_absolute(dataset_root)}', got '{data['path']}'"
         )
 
     if not isinstance(data["names"], dict) or not data["names"]:

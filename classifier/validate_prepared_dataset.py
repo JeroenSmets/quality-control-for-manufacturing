@@ -5,7 +5,14 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-from project_config import DATASET_ROOT, IMAGE_EXTENSIONS, NUM_WORKERS, OUTPUT_DATASET_DIR
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import (
+    CLASSIFIER_REPORTS_DIR,
+    DATASET_MANIFEST,
+    DATASET_ROOT,
+    IMAGE_EXTENSIONS,
+)
 
 
 class DatasetValidationError(Exception):
@@ -165,6 +172,7 @@ def validate_manifest_paths(manifest_rows, dataset_root: Path):
 def create_preview(valid_paths, report_dir: Path, preview_name: str, max_images: int = 16):
     try:
         import cv2
+        import numpy as np
     except ImportError:
         return None
 
@@ -173,6 +181,7 @@ def create_preview(valid_paths, report_dir: Path, preview_name: str, max_images:
 
     sample_paths = random.sample(valid_paths, min(max_images, len(valid_paths)))
     thumbnails = []
+    cell_size = 256
 
     for image_path in sample_paths:
         image = cv2.imread(str(image_path))
@@ -180,8 +189,23 @@ def create_preview(valid_paths, report_dir: Path, preview_name: str, max_images:
             continue
 
         height, width = image.shape[:2]
-        scale = 256 / max(height, width)
-        thumb = cv2.resize(image, (int(width * scale), int(height * scale)))
+        scale = cell_size / max(height, width)
+        resized_width = max(1, int(width * scale))
+        resized_height = max(1, int(height * scale))
+        thumb = cv2.resize(image, (resized_width, resized_height))
+        pad_top = (cell_size - resized_height) // 2
+        pad_bottom = cell_size - resized_height - pad_top
+        pad_left = (cell_size - resized_width) // 2
+        pad_right = cell_size - resized_width - pad_left
+        thumb = cv2.copyMakeBorder(
+            thumb,
+            pad_top,
+            pad_bottom,
+            pad_left,
+            pad_right,
+            cv2.BORDER_CONSTANT,
+            value=[0, 0, 0],
+        )
         thumbnails.append(thumb)
 
     if not thumbnails:
@@ -189,15 +213,12 @@ def create_preview(valid_paths, report_dir: Path, preview_name: str, max_images:
 
     cols = min(4, len(thumbnails))
     rows = []
+    blank = np.zeros((cell_size, cell_size, 3), dtype=thumbnails[0].dtype)
     for row_start in range(0, len(thumbnails), cols):
         row_images = thumbnails[row_start:row_start + cols]
-        widths = [img.shape[1] for img in row_images]
-        max_height = max(img.shape[0] for img in row_images)
-        normalized_row = [
-            cv2.copyMakeBorder(img, 0, max_height - img.shape[0], 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0])
-            for img in row_images
-        ]
-        rows.append(cv2.hconcat(normalized_row))
+        while len(row_images) < cols:
+            row_images.append(blank.copy())
+        rows.append(cv2.hconcat(row_images))
 
     grid = cv2.vconcat(rows)
     preview_path = report_dir / preview_name
@@ -227,13 +248,13 @@ def parse_args():
     parser.add_argument(
         "--manifest",
         type=Path,
-        default=Path("dataset_manifest.csv"),
+        default=DATASET_MANIFEST,
         help="Path to the dataset manifest CSV.",
     )
     parser.add_argument(
         "--reports-dir",
         type=Path,
-        default=Path("reports"),
+        default=CLASSIFIER_REPORTS_DIR,
         help="Directory where JSON report and preview image are written.",
     )
     parser.add_argument(

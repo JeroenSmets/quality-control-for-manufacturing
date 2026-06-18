@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -6,15 +7,19 @@ from torchvision import datasets, transforms
 from sklearn.metrics import classification_report, confusion_matrix
 import timm
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import CLASSIFIER_MODEL_PATH, CLASSIFIER_REPORTS_DIR, DATASET_ROOT
+
 
 # =========================
 # Configuration
 # =========================
 
-DATA_DIR = Path("dataset")
+DATA_DIR = DATASET_ROOT
 TEST_DIR = DATA_DIR / "test"
 
-MODEL_PATH = Path("qc_classifier.pt")
+MODEL_PATH = CLASSIFIER_MODEL_PATH
 
 BATCH_SIZE = 16
 NUM_WORKERS = 0
@@ -127,7 +132,8 @@ def print_wrong_predictions(test_dataset, y_true, y_pred, y_prob_bad, class_name
 
 
 def save_predictions_csv(test_dataset, y_true, y_pred, y_prob_bad, class_names):
-    output_path = Path("test_predictions.csv")
+    output_path = CLASSIFIER_REPORTS_DIR / "test_predictions.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("image_path,true_label,predicted_label,prob_bad,correct\n")

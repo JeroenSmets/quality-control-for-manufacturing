@@ -1,9 +1,12 @@
 import cv2
 import random
 import shutil
+import sys
 from pathlib import Path
 
-from project_config import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import (
     IMAGE_EXTENSIONS,
     OUTPUT_DATASET_DIR,
     RANDOM_SEED,

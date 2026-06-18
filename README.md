@@ -1,97 +1,107 @@
 # Quality Control for Manufacturing
 
-This repository contains a manufacturing quality-control pipeline for classifier, anomaly, and object-detection training. The object-detection stage locates the inspected part in raw images, crops it, and generates YOLO-format data for the existing classification/anomaly pipeline.
+This repository contains a manufacturing quality-control pipeline split into four stages:
+
+1. SAM-assisted labeling for inspected-object boxes
+2. YOLO object detection for locating the inspected object
+3. Classifier training for good/bad quality classification
+4. Anomaly detection with PatchCore/Anomalib
+
+All commands below are run from the repository root.
 
 ## Quick Start
 
-1. Create and activate a Python virtual environment.
-2. Install base dependencies with `python -m pip install -r requirements-base.txt`.
-3. Install a PyTorch wheel for your hardware:
-   - NVIDIA CUDA: `python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121`
-   - CPU-only: `python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`
-   - ROCm: `python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm7.8`
-4. On Windows, run `.\install_windows.ps1` to install dependencies and choose the correct PyTorch target.
-5. On Linux, run `./install_linux.sh`.
+Create and activate a virtual environment:
 
-## Repository Setup
+```bash
+python -m venv .venv
+```
 
-This repository is ready to initialize and push to GitHub. The included `.gitignore` excludes local dataset folders, generated outputs, and large model weights so that the published repo stays small and portable.
-
-Example commands:
+Windows:
 
 ```powershell
-git init
-git add .
-git commit -m "Initial quality control pipeline"
-git branch -M main
-git remote add origin https://github.com/<your-username>/quality-control-for-manufacturing.git
-git push -u origin main
+.\.venv\Scripts\Activate.ps1
 ```
 
-## Pipeline Overview
+Linux:
 
-1. Sample raw images for detector labeling
-2. Manually label object bounding boxes in the sampled images
-3. Create a YOLO-format detection dataset and validate it
-4. Train an Ultralytics YOLO object detector
-5. Test the object detector on unseen raw images
-6. Build a detector-cropped `dataset` for classifier and anomaly training
-7. Validate the prepared classifier/anomaly dataset
-8. Run classifier training
-9. Run anomaly detector training
+```bash
+source .venv/bin/activate
+```
 
-## Expected Folder Structure
+Install base dependencies:
 
-### Raw source folders
+```bash
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r requirements-base.txt
+```
+
+Install PyTorch for your hardware:
+
+```bash
+# NVIDIA CUDA
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# CPU only
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# ROCm
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm7.8
+```
+
+Or use the installer scripts:
+
+```powershell
+.\install_windows.ps1
+```
+
+```bash
+./install_linux.sh
+```
+
+## Repository Structure
 
 ```text
-casting_512x512/
-  ok_front/
-  def_front/
+quality-control-for-manufacturing/
+  README.md
+  requirements-base.txt
+  install_windows.ps1
+  install_linux.sh
+  raw_data/
+    casting_512x512/
+      ok_front/
+      def_front/
+  sam_labeling/
+    sample_detection_label_images.py
+    label_detection_images.py
+    detector_labeling_pool/
+    checkpoints/
+  yolo_detection/
+    prepare_detection_dataset.py
+    validate_object_detection_dataset.py
+    train_object_detector.py
+    test_object_detector_on_unseen.py
+    build_dataset_from_detector.py
+    object_detection_dataset/
+    checkpoints/
+    runs/
+  classifier/
+    validate_prepared_dataset.py
+    finetuning_classify.py
+    dataset/
+    dataset_rejects/
+    reports/
+    runs/
+  anomaly_detection/
+    finetuning_anomaly.py
+    anomalib_dataset/
+    runs/
+  shared/
+    path_utils.py
+    project_config.py
 ```
 
-### Detection dataset
-
-```text
-object_detection_dataset/
-  images/
-    train/
-    val/
-  labels/
-    train/
-    val/
-  data.yaml
-```
-
-### Classifier / Anomaly dataset output
-
-```text
-dataset/
-  train/
-    good/
-    bad/
-  val/
-    good/
-    bad/
-  test/
-    good/
-    bad/
-```
-
-### Rejects and reports
-
-```text
-dataset_rejects/
-  no_detection/
-    good/
-    bad/
-  read_error/
-    good/
-    bad/
-reports/
-  dataset_validation_report.json
-  dataset_validation_preview.jpg
-```
+Generated datasets, checkpoints, reports, and run outputs are ignored by Git.
 
 ## Important Labeling Note
 
@@ -101,206 +111,204 @@ Detector labels must only mark the inspected object:
 0 inspected_object
 ```
 
-Do not label defects as separate detector classes. The `good` / `bad` quality label is derived from the raw source folder path, not from object detection labels.
+Do not label defects as separate detector classes. The good/bad quality label comes from the raw source folder path.
 
-## Commands
+## Full Pipeline Commands
 
 ### 1. Sample images for detector labeling
 
 ```bash
-python sample_detection_label_images.py --good-count 50 --bad-count 50
-```
-
-This copies 100 representative images, 50 from `casting_512x512/ok_front` and 50 from `casting_512x512/def_front`, into `detector_labeling_pool/` and creates `detector_labeling_pool/manifest.csv`.
-
-### 2. Manually label object boxes
-
-Use the built-in interactive point-based labeler to generate a mask and bounding box automatically:
-
-```bash
-python label_detection_images.py --image-dir detector_labeling_pool --labels-dir detector_labeling_pool
-```
-
-If you have a Segment Anything checkpoint, enable point-guided SAM segmentation with:
-
-```bash
-python label_detection_images.py --image-dir detector_labeling_pool --labels-dir detector_labeling_pool --sam-checkpoint .\sam_vit_b_01ec64.pth --sam-model vit_b --device cuda
-```
-
-If you use an absolute checkpoint path that contains spaces, quote it, for example: `--sam-checkpoint "C:\Python Code\qc_for_manufacturing\sam_vit_b_01ec64.pth"`.
-
-- Left click to add foreground points on the inspected object.
-- Right click to add background points on the surrounding area.
-- Press `g` to compute the mask and derive a tight bounding box.
-- Press `s` to save the generated YOLO label file.
-- Label only the object to inspect, not the defect.
-- After labeling, run the preparation helper to split data and generate `data.yaml`:
-
-```bash
-python prepare_detection_dataset.py --source-dir detector_labeling_pool
-```
-
-This creates the expected layout under `object_detection_dataset/`:
-
-```text
-object_detection_dataset/
-  images/
-    train/
-    val/
-  labels/
-    train/
-    val/
-  data.yaml
-```
-
-If you want to overwrite an existing dataset root, add `--overwrite`.
-
-### 3. Validate the YOLO detection dataset
-
-```bash
-python validate_object_detection_dataset.py
-```
-
-This checks:
-- `object_detection_dataset` folder layout
-- `data.yaml` contents
-- every image has a matching `.txt` label file or an empty label file
-- normalized coordinates are between 0 and 1
-- class IDs exist in `names`
-
-### 4. Train the object detector
-
-```bash
-python train_object_detector.py
+python sam_labeling/sample_detection_label_images.py --good-count 50 --bad-count 50
 ```
 
 Defaults:
-- `device=cpu`
-- `workers=0`
-- pretrained weights: `yolo26n.pt`
-
-If you have a GPU, you can override:
-
-```bash
-python train_object_detector.py --device 0 --epochs 100 --batch-size 4
-```
-
-### 5. Test the object detector on unseen raw images
-
-```bash
-python test_object_detector_on_unseen.py --device 0 --count-per-class 10
-```
-
-This samples 10 unseen images from `casting_512x512/ok_front` and 10 unseen images from `casting_512x512/def_front`, excluding images listed in `detector_labeling_pool/manifest.csv`, then saves annotated predictions and `summary.csv` to:
 
 ```text
-runs/detect/unseen_object_detector_test
+raw_data/casting_512x512/ok_front
+raw_data/casting_512x512/def_front
+sam_labeling/detector_labeling_pool/
 ```
 
-If an object is missed but appears visually clear, retry with a lower confidence threshold:
+### 2. Manually label object boxes
+
+Without SAM:
 
 ```bash
-python test_object_detector_on_unseen.py --device 0 --count-per-class 10 --conf 0.10 --output-dir runs/detect/unseen_object_detector_test_conf010
+python sam_labeling/label_detection_images.py --image-dir sam_labeling/detector_labeling_pool --labels-dir sam_labeling/detector_labeling_pool
 ```
 
-### 6. Build the detector-cropped dataset
+With SAM:
 
 ```bash
-python build_dataset_from_detector.py --weights runs/detect/runs/detect/inspection_object_detector/weights/best.pt --device 0
+python sam_labeling/label_detection_images.py --image-dir sam_labeling/detector_labeling_pool --labels-dir sam_labeling/detector_labeling_pool --sam-checkpoint sam_labeling/checkpoints/sam_vit_b_01ec64.pth --sam-model vit_b --device cuda
 ```
 
-This uses the trained best object detector on CUDA GPU `0` with the default confidence threshold `0.25`, processes raw images, crops detected inspected objects, splits by `70/15/15`, and writes the output into:
+Controls:
+
+- Left click adds foreground points on the inspected object.
+- Right click adds background points.
+- Press `g` to compute the mask and derive a bounding box.
+- Press `s` to save the YOLO label file.
+- Press `n` and `p` to move through images.
+
+### 3. Prepare the YOLO detection dataset
+
+```bash
+python yolo_detection/prepare_detection_dataset.py --source-dir sam_labeling/detector_labeling_pool
+```
+
+Default output:
 
 ```text
-dataset/train/good
- dataset/train/bad
- dataset/val/good
- dataset/val/bad
- dataset/test/good
- dataset/test/bad
+yolo_detection/object_detection_dataset/
 ```
 
-Rejected source images are written to `dataset_rejects/no_detection/` or `dataset_rejects/read_error/`.
-
-### 7. Validate the prepared dataset
+Overwrite an existing detection dataset:
 
 ```bash
-python validate_prepared_dataset.py
+python yolo_detection/prepare_detection_dataset.py --source-dir sam_labeling/detector_labeling_pool --overwrite
 ```
 
-This validates the final dataset structure, reads images, ensures no zero-sized crops, checks manifest consistency, and writes a JSON report and optional preview image under `reports/`.
-
-### 8. Run classifier training
+### 4. Validate the YOLO detection dataset
 
 ```bash
-python finetuning_classify.py --device 0
+python yolo_detection/validate_object_detection_dataset.py
 ```
 
-This trains the good/bad classifier on CUDA GPU `0` using the detector-cropped `dataset/` folder. Each run automatically creates a timestamped results folder under:
+Default dataset:
 
 ```text
-runs/classify
+yolo_detection/object_detection_dataset/
 ```
 
-Each classifier run folder contains:
-- `config.json`
-- `training_history.csv`
-- `training_curves.png`
-- `confusion_matrix.csv`
-- `confusion_matrix.png`
-- `classification_report.txt`
-- `classification_report.json`
-- `test_predictions.csv`
-- `metrics.json`
-- `qc_classifier.pt`
+### 5. Train the YOLO object detector
 
-### 9. Run anomaly detector training
+CPU default:
 
 ```bash
-python finetuning_anomaly.py --device 0
+python yolo_detection/train_object_detector.py
 ```
 
-This prepares `anomalib_dataset/` from the detector-cropped `dataset/` folder and trains PatchCore on CUDA GPU `0`. Each run automatically creates a timestamped results folder under:
+GPU example:
+
+```bash
+python yolo_detection/train_object_detector.py --device 0 --epochs 100 --batch-size 4
+```
+
+Defaults:
 
 ```text
-runs/anomaly
+yolo_detection/object_detection_dataset/data.yaml
+yolo_detection/checkpoints/yolo26n.pt
+yolo_detection/runs/
 ```
 
-Each anomaly run folder contains:
-- `config.json`
-- `dataset_summary.json`
-- `anomalib_dataset_manifest.csv`
-- `test_results.json`
-- `test_results.csv`
-- `test_results.txt`
-- `anomaly_predictions.csv`
-- `anomaly_predictions.json`
-- `prediction_summary.json`
-- `anomaly_confusion_matrix.csv`
-- `anomaly_confusion_matrix.png`
-- `anomaly_score_distribution.png`
-- `anomaly_score_ranking.png`
-- `wrong_predictions/`
-- `metrics.json`
-- `patchcore_metadata.ckpt`
-- `anomalib_engine/`
+If `yolo_detection/checkpoints/yolo26n.pt` is not present, the script falls back to the model name `yolo26n.pt`, matching the previous Ultralytics behavior.
 
-## Notes
+### 6. Test the object detector on unseen raw images
 
-- The object detector is only responsible for finding the inspected object in the scene.
-- Good/bad class labels remain based on the raw folder source.
-- The goal is to preserve the existing classifier and anomaly dataset contract exactly.
+```bash
+python yolo_detection/test_object_detector_on_unseen.py --device 0 --count-per-class 10
+```
+
+Defaults:
+
+```text
+raw_data/casting_512x512/
+sam_labeling/detector_labeling_pool/manifest.csv
+yolo_detection/runs/unseen_object_detector_test/
+```
+
+Lower confidence example:
+
+```bash
+python yolo_detection/test_object_detector_on_unseen.py --device 0 --count-per-class 10 --conf 0.10 --output-dir yolo_detection/runs/unseen_object_detector_test_conf010
+```
+
+### 7. Build the detector-cropped classifier dataset
+
+```bash
+python yolo_detection/build_dataset_from_detector.py --weights yolo_detection/runs/detect/inspection_object_detector/weights/best.pt --device 0
+```
+
+Defaults:
+
+```text
+raw_data/casting_512x512/
+classifier/dataset/
+classifier/dataset_rejects/
+classifier/dataset_manifest.csv
+```
+
+### 8. Validate the prepared classifier/anomaly dataset
+
+```bash
+python classifier/validate_prepared_dataset.py
+```
+
+Defaults:
+
+```text
+classifier/dataset/
+classifier/reports/
+```
+
+### 9. Run classifier training
+
+```bash
+python classifier/finetuning_classify.py --device 0
+```
+
+Defaults:
+
+```text
+classifier/dataset/
+classifier/runs/
+```
+
+Each run writes training metrics, plots, predictions, and a per-run `qc_classifier.pt` under `classifier/runs/`.
+
+### 10. Run anomaly detector training
+
+```bash
+python anomaly_detection/finetuning_anomaly.py --device 0
+```
+
+Defaults:
+
+```text
+classifier/dataset/
+anomaly_detection/anomalib_dataset/
+anomaly_detection/runs/
+```
+
+## Folder Path Guide
+
+- Raw source data lives under `raw_data/`.
+- SAM labeling images and manifests live under `sam_labeling/`.
+- YOLO datasets, checkpoints, and runs live under `yolo_detection/`.
+- Classifier datasets, rejects, reports, and runs live under `classifier/`.
+- Anomaly datasets and runs live under `anomaly_detection/`.
+- Shared path/config helpers live under `shared/`.
 
 ## Troubleshooting
 
-- If `ultralytics` is not installed, install it with:
+If `ultralytics` is missing:
 
 ```bash
-pip install ultralytics
+python -m pip install ultralytics
 ```
 
-- If OpenCV is not installed and the preview generation fails, install:
+If OpenCV is missing:
 
 ```bash
-pip install opencv-python
+python -m pip install opencv-python
 ```
+
+If SAM is missing:
+
+```bash
+python -m pip install segment-anything
+```
+
+If a script cannot find data, check that the command is being run from the repository root and that the input folder matches the new stage path.

@@ -2,15 +2,19 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-from project_config import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import (
     DEFAULT_DEVICE,
     DETECTOR_BATCH_SIZE,
     DETECTOR_EPOCHS,
     DETECTOR_IMG_SIZE,
+    DETECTOR_MODEL_NAME,
     DETECTOR_PATIENCE,
     DETECTOR_WEIGHTS,
     NUM_WORKERS,
     OBJECT_DETECTION_DATA_YAML,
+    YOLO_RUNS_DIR,
 )
 
 
@@ -34,6 +38,14 @@ def validate_data_yaml(path: Path):
 
     if not path.is_file():
         raise FileNotFoundError(f"data.yaml is not a file: {path}")
+
+
+def resolve_pretrained_weights(path: Path):
+    if path.exists():
+        return path
+    if path == DETECTOR_WEIGHTS:
+        return Path(DETECTOR_MODEL_NAME)
+    return path
 
 
 def parse_args():
@@ -85,7 +97,7 @@ def parse_args():
     parser.add_argument(
         "--project",
         type=Path,
-        default=Path("runs/detect"),
+        default=YOLO_RUNS_DIR / "detect",
         help="Ultralytics project folder for training results.",
     )
     parser.add_argument(
@@ -118,7 +130,9 @@ def main():
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Using pretrained weights: {args.weights}")
+    weights = resolve_pretrained_weights(args.weights)
+
+    print(f"Using pretrained weights: {weights}")
     print(f"Using dataset YAML: {args.data_yaml}")
     print(f"Training device: {args.device}")
     print(f"Image size: {args.imgsz}")
@@ -128,7 +142,7 @@ def main():
     print(f"Project: {args.project}")
     print(f"Run name: {args.name}")
 
-    model = YOLO(str(args.weights))
+    model = YOLO(str(weights))
 
     print("Starting YOLO training...")
     results = model.train(

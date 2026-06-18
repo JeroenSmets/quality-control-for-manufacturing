@@ -4,6 +4,7 @@ from datetime import datetime
 import csv
 import copy
 import json
+import sys
 import torch
 import torch.nn as nn
 import torch.multiprocessing as mp
@@ -12,7 +13,9 @@ from torchvision import datasets, transforms
 from sklearn.metrics import classification_report, confusion_matrix
 import timm
 
-from project_config import DATASET_ROOT, NUM_WORKERS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import CLASSIFIER_MODEL_PATH, CLASSIFIER_RUNS_DIR, DATASET_ROOT, NUM_WORKERS
 
 
 # =========================
@@ -30,16 +33,17 @@ MODEL_NAME = "efficientnet_b0"
 IMG_SIZE = 224
 BATCH_SIZE = 8
 
-EPOCHS_HEAD = 25
-EPOCHS_FINETUNE = 25
+EPOCHS_HEAD = 50
+EPOCHS_FINETUNE = 50
 
 LR_HEAD = 1e-3
 LR_FINETUNE = 1e-5
 
 PATIENCE = 20
 
-OUTPUT_MODEL_PATH = "qc_classifier.pt"
-RUNS_DIR = Path("runs") / "classify"
+OUTPUT_MODEL_PATH = CLASSIFIER_MODEL_PATH
+RUN_MODEL_FILENAME = "qc_classifier.pt"
+RUNS_DIR = CLASSIFIER_RUNS_DIR
 
 
 # =========================
@@ -49,6 +53,12 @@ RUNS_DIR = Path("runs") / "classify"
 def parse_args():
     parser = ArgumentParser(
         description="Train the good/bad classifier on detector-cropped images."
+    )
+    parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=DATA_DIR,
+        help="Root of the prepared classifier dataset.",
     )
     parser.add_argument(
         "--device",
@@ -346,7 +356,7 @@ def save_run_results(
     }
     write_json(run_dir / "metrics.json", metrics)
 
-    run_model_path = run_dir / OUTPUT_MODEL_PATH
+    run_model_path = run_dir / RUN_MODEL_FILENAME
     torch.save(checkpoint, run_model_path)
     return run_model_path
 
@@ -526,6 +536,7 @@ def main():
     args = parse_args()
     device = resolve_device(args.device)
     run_dir = create_run_dir(args.runs_dir)
+    data_dir = args.dataset_root
 
     print("Using:", device)
     print("Run results:", run_dir)
@@ -535,9 +546,9 @@ def main():
 
     train_tfms, eval_tfms = build_transforms()
 
-    train_ds = datasets.ImageFolder(DATA_DIR / "train", transform=train_tfms)
-    val_ds = datasets.ImageFolder(DATA_DIR / "val", transform=eval_tfms)
-    test_ds = datasets.ImageFolder(DATA_DIR / "test", transform=eval_tfms)
+    train_ds = datasets.ImageFolder(data_dir / "train", transform=train_tfms)
+    val_ds = datasets.ImageFolder(data_dir / "val", transform=eval_tfms)
+    test_ds = datasets.ImageFolder(data_dir / "test", transform=eval_tfms)
 
     class_names = train_ds.classes
 
@@ -608,7 +619,7 @@ def main():
             "created_at": datetime.now().isoformat(timespec="seconds"),
             "device": str(device),
             "gpu": torch.cuda.get_device_name(device.index or 0) if device.type == "cuda" else None,
-            "data_dir": str(DATA_DIR),
+            "data_dir": str(data_dir),
             "model_name": MODEL_NAME,
             "image_size": IMG_SIZE,
             "batch_size": BATCH_SIZE,
@@ -624,7 +635,7 @@ def main():
             "train_images": len(train_ds),
             "val_images": len(val_ds),
             "test_images": len(test_ds),
-            "output_model_path": OUTPUT_MODEL_PATH,
+            "output_model_path": str(OUTPUT_MODEL_PATH),
             "run_dir": str(run_dir),
         },
     )
@@ -699,6 +710,7 @@ def main():
         "class_names": class_names,
         "img_size": IMG_SIZE,
     }
+    OUTPUT_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     torch.save(checkpoint, OUTPUT_MODEL_PATH)
 
     print(f"\nSaved model to: {OUTPUT_MODEL_PATH}")

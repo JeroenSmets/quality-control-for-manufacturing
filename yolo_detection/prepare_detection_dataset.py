@@ -1,12 +1,16 @@
 import random
 import shutil
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-from project_config import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.path_utils import repo_relative_or_absolute
+from shared.project_config import (
+    DETECTOR_LABELING_POOL_DIR,
     IMAGE_EXTENSIONS,
     OBJECT_DETECTION_DATASET_ROOT,
-    OBJECT_DETECTION_DATA_YAML,
     RANDOM_SEED,
 )
 
@@ -83,8 +87,9 @@ def copy_files(image_paths, split_name, source_dir: Path, target_root: Path, mov
 
 def write_data_yaml(output_path: Path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset_path = repo_relative_or_absolute(output_path.parent)
     output_path.write_text(
-        "path: object_detection_dataset\n"
+        f"path: {dataset_path}\n"
         "train: images/train\n"
         "val: images/val\n"
         "names:\n"
@@ -100,7 +105,7 @@ def parse_args():
     parser.add_argument(
         "--source-dir",
         type=Path,
-        default=Path("detector_labeling_pool"),
+        default=DETECTOR_LABELING_POOL_DIR,
         help="Directory containing labeled sample images and .txt labels.",
     )
     parser.add_argument(

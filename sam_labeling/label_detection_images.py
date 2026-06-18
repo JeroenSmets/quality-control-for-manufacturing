@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 import cv2
@@ -13,7 +14,9 @@ except ImportError:
     sam_model_registry = None
     SAM_AVAILABLE = False
 
-from project_config import IMAGE_EXTENSIONS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import DETECTOR_LABELING_POOL_DIR, IMAGE_EXTENSIONS
 
 
 def parse_args():
@@ -23,13 +26,13 @@ def parse_args():
     parser.add_argument(
         "--image-dir",
         type=Path,
-        default=Path("detector_labeling_pool"),
+        default=DETECTOR_LABELING_POOL_DIR,
         help="Directory containing images to label.",
     )
     parser.add_argument(
         "--labels-dir",
         type=Path,
-        default=Path("detector_labeling_pool"),
+        default=DETECTOR_LABELING_POOL_DIR,
         help="Directory to write YOLO label .txt files.",
     )
     parser.add_argument(

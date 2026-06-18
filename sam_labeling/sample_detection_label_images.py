@@ -1,9 +1,13 @@
 import csv
 import random
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-from project_config import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import (
+    DETECTOR_LABELING_POOL_DIR,
     IMAGE_EXTENSIONS,
     RANDOM_SEED,
     RAW_BAD_DIR,
@@ -76,8 +80,20 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("detector_labeling_pool"),
+        default=DETECTOR_LABELING_POOL_DIR,
         help="Output folder for sampled label images.",
+    )
+    parser.add_argument(
+        "--good-dir",
+        type=Path,
+        default=RAW_GOOD_DIR,
+        help="Raw good image directory.",
+    )
+    parser.add_argument(
+        "--bad-dir",
+        type=Path,
+        default=RAW_BAD_DIR,
+        help="Raw defect image directory.",
     )
     parser.add_argument(
         "--good-count",
@@ -99,11 +115,11 @@ def main():
     )
     args = parser.parse_args()
 
-    good_images = get_image_paths(RAW_GOOD_DIR)
-    bad_images = get_image_paths(RAW_BAD_DIR)
+    good_images = get_image_paths(args.good_dir)
+    bad_images = get_image_paths(args.bad_dir)
 
-    print(f"Found {len(good_images)} good images in: {RAW_GOOD_DIR}")
-    print(f"Found {len(bad_images)} bad images in: {RAW_BAD_DIR}")
+    print(f"Found {len(good_images)} good images in: {args.good_dir}")
+    print(f"Found {len(bad_images)} bad images in: {args.bad_dir}")
 
     sampled_good = sample_images(good_images, args.good_count, args.seed)
     sampled_bad = sample_images(bad_images, args.bad_count, args.seed)

@@ -8,7 +8,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from project_config import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.project_config import (
+    DATASET_MANIFEST,
+    DATASET_REJECTS_DIR,
+    DETECTOR_MODEL_NAME,
     DETECTOR_WEIGHTS,
     IMAGE_EXTENSIONS,
     NUM_WORKERS,
@@ -86,6 +91,8 @@ def build_reject_dirs(reject_root: Path):
 
 def load_model(weights, device):
     YOLO = import_ultralytics()
+    if weights == DETECTOR_WEIGHTS and not weights.exists():
+        weights = Path(DETECTOR_MODEL_NAME)
     try:
         return YOLO(str(weights))
     except Exception as exc:
@@ -350,7 +357,7 @@ def parse_args():
     parser.add_argument(
         "--reject-root",
         type=Path,
-        default=Path("dataset_rejects"),
+        default=DATASET_REJECTS_DIR,
         help="Folder to save rejected source images.",
     )
     parser.add_argument(
@@ -410,7 +417,7 @@ def parse_args():
     parser.add_argument(
         "--manifest",
         type=Path,
-        default=Path("dataset_manifest.csv"),
+        default=DATASET_MANIFEST,
         help="CSV manifest path.",
     )
     parser.add_argument(

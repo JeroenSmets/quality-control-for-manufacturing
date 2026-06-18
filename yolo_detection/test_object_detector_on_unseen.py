@@ -5,17 +5,16 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-from project_config import IMAGE_EXTENSIONS, RANDOM_SEED, RAW_BAD_DIR, RAW_GOOD_DIR
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-
-DEFAULT_BEST_WEIGHTS = (
-    Path("runs")
-    / "detect"
-    / "runs"
-    / "detect"
-    / "inspection_object_detector"
-    / "weights"
-    / "best.pt"
+from shared.project_config import (
+    DETECTOR_BEST_WEIGHTS,
+    DETECTOR_LABELING_POOL_DIR,
+    IMAGE_EXTENSIONS,
+    RANDOM_SEED,
+    RAW_BAD_DIR,
+    RAW_GOOD_DIR,
+    UNSEEN_DETECTOR_TEST_DIR,
 )
 
 
@@ -37,7 +36,7 @@ def parse_args():
     parser.add_argument(
         "--weights",
         type=Path,
-        default=DEFAULT_BEST_WEIGHTS,
+        default=DETECTOR_BEST_WEIGHTS,
         help="Path to trained YOLO detector weights.",
     )
     parser.add_argument(
@@ -55,13 +54,13 @@ def parse_args():
     parser.add_argument(
         "--manifest",
         type=Path,
-        default=Path("detector_labeling_pool") / "manifest.csv",
+        default=DETECTOR_LABELING_POOL_DIR / "manifest.csv",
         help="Manifest created by sample_detection_label_images.py; used to exclude seen images.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("runs") / "detect" / "unseen_object_detector_test",
+        default=UNSEEN_DETECTOR_TEST_DIR,
         help="Directory for annotated predictions, labels, and summary.csv.",
     )
     parser.add_argument(

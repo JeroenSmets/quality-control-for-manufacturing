@@ -18,6 +18,21 @@ dist/
 *.swp
 
 # Data, outputs, and generated files
+raw_data/
+sam_labeling/detector_labeling_pool/
+sam_labeling/checkpoints/*.pth
+yolo_detection/object_detection_dataset/
+yolo_detection/checkpoints/*.pt
+yolo_detection/runs/
+classifier/dataset/
+classifier/dataset_rejects/
+classifier/reports/
+classifier/runs/
+classifier/dataset_manifest.csv
+anomaly_detection/anomalib_dataset/
+anomaly_detection/runs/
+
+# Legacy root-level generated paths
 dataset/
 dataset_rejects/
 reports/
